@@ -16,7 +16,9 @@ import com.soywiz.korim.bitmap.trace.*
 import com.soywiz.korim.color.*
 import com.soywiz.korim.font.*
 import com.soywiz.korim.format.*
+import com.soywiz.korim.paint.*
 import com.soywiz.korim.text.*
+import com.soywiz.korim.vector.*
 import com.soywiz.korio.file.std.*
 import com.soywiz.korio.stream.*
 import com.soywiz.korma.geom.*
@@ -26,6 +28,49 @@ import com.soywiz.korma.geom.vector.*
 import com.soywiz.korma.random.*
 import kotlinx.coroutines.*
 import kotlin.random.*
+
+suspend fun main() = Korge(bgcolor = Colors.DARKCYAN.mix(Colors.BLACK, 0.8), clipBorders = false
+    //, debugAg = true
+) {
+    mainMipmaps()
+    //mainColorTransformFilter()
+    //mainExifTest()
+    //mainFilterScale()
+    //mainVectorRendering()
+    //mainRenderText()
+    //mainTextMetrics()
+    //mainBitmapTexId()
+    //mainFiltersSample()
+    //mainKorviSample()
+
+    /*
+    val atlas = MutableAtlasUnit(4096)
+    image(resourcesVfs["Portrait_3.jpg"].readBitmapSlice(atlas = atlas)).scale(0.2)
+    image(resourcesVfs["Portrait_3.jpg"].readBitmapSliceWithOrientation(atlas = atlas)).scale(0.2).xy(300, 0)
+    image(atlas.bitmap).scale(0.2).xy(600, 0)
+    */
+
+
+    //rotatedTexture()
+    //mainUITreeView()
+    //mainUIImageTester()
+    //mainEditor()
+    //mainTrimmedAtlas()
+    //mainRotateCircle()
+    //mainImageTrace()
+    //mainEmoji()
+    //Bunnymark().apply { bunnymarkMain() }
+    //bezierSample()
+    //particlesMain()
+    //terminalEmulatorMain()
+    //mainBVH()
+    //mainCircles()
+    //mainVampire()
+    //mainCompression()
+    //println("HELLO WORLD!")
+    //withContext(Dispatchers.Unconfined) {
+}
+
 
 //suspend fun main() {
 //    for (n in 0 until 1000) {
@@ -49,27 +94,6 @@ import kotlin.random.*
 //        println(sw.elapsed)
 //    }
 //}
-
-suspend fun main() = Korge(bgcolor = Colors.DARKCYAN.mix(Colors.BLACK, 0.8), clipBorders = false) {
-    rotatedTexture()
-    //mainUITreeView()
-    //mainUIImageTester()
-    //mainEditor()
-    //mainTrimmedAtlas()
-    //mainRotateCircle()
-    //mainImageTrace()
-    //mainEmoji()
-    //Bunnymark().apply { bunnymarkMain() }
-    //bezierSample()
-    //particlesMain()
-    //terminalEmulatorMain()
-    //mainBVH()
-    //mainCircles()
-    //mainVampire()
-    //mainCompression()
-    //println("HELLO WORLD!")
-    //withContext(Dispatchers.Unconfined) {
-}
 
 suspend fun Stage.rotatedTexture() {
     //val tex = resourcesVfs["korim.png"].readBitmapSlice().rotateRight()

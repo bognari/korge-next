@@ -14,7 +14,6 @@ import com.soywiz.korio.util.*
 import com.soywiz.korma.geom.*
 import com.soywiz.korma.math.*
 import kotlin.coroutines.*
-import kotlinx.coroutines.*
 
 interface AGFactory {
     val supportsNativeFrame: Boolean
@@ -84,8 +83,8 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
     open fun repaint() {
     }
 
-    open fun resized(width: Int, height: Int) {
-        mainRenderBuffer.setSize(0, 0, width, height, width, height)
+    fun resized(width: Int, height: Int) {
+        resized(0, 0, width, height, width, height)
     }
 
     open fun resized(x: Int, y: Int, width: Int, height: Int, fullWidth: Int, fullHeight: Int) {
@@ -239,19 +238,18 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
 
     //TODO: would it better if this was an interface ?
     open inner class Texture : Closeable {
-        var isFbo = false
-        open val premultiplied = true
-        var requestMipmaps = false
-        var mipmaps = false; protected set
+        var isFbo: Boolean = false
+        open val premultiplied: Boolean = true
+        var requestMipmaps: Boolean = false
+        var mipmaps: Boolean = false; protected set
         var source: BitmapSourceBase = SyncBitmapSource.NIL
         private var uploaded: Boolean = false
         private var generating: Boolean = false
         private var generated: Boolean = false
         private var tempBitmap: Bitmap? = null
         var ready: Boolean = false; private set
-        val texId = lastTextureId++
-        @KoragExperimental
-        var transform: Matrix3D = Matrix3D()
+        val texId: Int = lastTextureId++
+        open val nativeTexId: Int get() = texId
 
         init {
             createdTextureCount++
@@ -277,12 +275,20 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
             return upload(bmp?.extract(), mipmaps)
         }
 
-        fun upload(source: BitmapSourceBase, mipmaps: Boolean = false): Texture = this.apply {
+        fun upload(source: BitmapSourceBase, mipmaps: Boolean = false): Texture {
             this.source = source
             uploadedSource()
             invalidate()
             this.requestMipmaps = mipmaps
+            return this
         }
+
+        fun uploadAndBindEnsuring(bmp: Bitmap?, mipmaps: Boolean = false): Texture =
+            upload(bmp, mipmaps).bindEnsuring()
+        fun uploadAndBindEnsuring(bmp: BitmapSlice<Bitmap>?, mipmaps: Boolean = false): Texture =
+            upload(bmp, mipmaps).bindEnsuring()
+        fun uploadAndBindEnsuring(source: BitmapSourceBase, mipmaps: Boolean = false): Texture =
+            upload(source, mipmaps).bindEnsuring()
 
         protected open fun uploadedSource() {
         }
@@ -293,15 +299,16 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
         open fun unbind() {
         }
 
-        fun manualUpload() = this.apply {
+        fun manualUpload(): Texture {
             uploaded = true
+            return this
         }
 
-        fun bindEnsuring() {
+        fun bindEnsuring(): Texture {
             bind()
-            if (isFbo) return
+            if (isFbo) return this
             val source = this.source
-            if (uploaded) return
+            if (uploaded) return this
 
             if (!generating) {
                 generating = true
@@ -327,6 +334,7 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
                 tempBitmap = null
                 ready = true
             }
+            return this
         }
 
         open fun actualSyncUpload(source: BitmapSourceBase, bmp: Bitmap?, requestMipmaps: Boolean) {
@@ -357,11 +365,13 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
 
     data class TextureUnit(
         var texture: AG.Texture? = null,
-        var linear: Boolean = true
+        var linear: Boolean = true,
+        var trilinear: Boolean? = null,
     ) {
-        fun set(texture: AG.Texture?, linear: Boolean) {
+        fun set(texture: AG.Texture?, linear: Boolean, trilinear: Boolean? = null) {
             this.texture = texture
             this.linear = linear
+            this.trilinear = trilinear
         }
     }
 
@@ -698,13 +708,18 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
         fun scissor(scissor: RectangleInt?)
     }
 
+    object RenderBufferConsts {
+        const val DEFAULT_INITIAL_WIDTH = 128
+        const val DEFAULT_INITIAL_HEIGHT = 128
+    }
+
     open class BaseRenderBufferImpl : BaseRenderBuffer {
         override var x = 0
         override var y = 0
-        override var width = 128
-        override var height = 128
-        override var fullWidth = 128
-        override var fullHeight = 128
+        override var width = RenderBufferConsts.DEFAULT_INITIAL_WIDTH
+        override var height = RenderBufferConsts.DEFAULT_INITIAL_HEIGHT
+        override var fullWidth = RenderBufferConsts.DEFAULT_INITIAL_WIDTH
+        override var fullHeight = RenderBufferConsts.DEFAULT_INITIAL_HEIGHT
         private val _scissor = RectangleInt()
         override var scissor: RectangleInt? = null
 
@@ -748,10 +763,11 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
                 return _tex!!
             }
 
-        protected var dirty = false
+        protected var dirty = true
 
         override fun setSize(x: Int, y: Int, width: Int, height: Int, fullWidth: Int, fullHeight: Int) {
             if (
+                this.x != x ||this.y != y ||
                 this.width != width || this.height != height ||
                 this.fullWidth != fullWidth || this.fullHeight != fullHeight
             ) {
@@ -775,7 +791,7 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
         flipInternal()
     }
 
-    protected open fun flipInternal() = Unit
+    open fun flipInternal() = Unit
 
     open fun startFrame() {
     }
@@ -789,8 +805,10 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
         clearStencil: Boolean = true
     ) = Unit
 
-    @PublishedApi
-    internal var currentRenderBuffer: BaseRenderBuffer? = null
+    //@PublishedApi
+    @KoragExperimental
+    var currentRenderBuffer: BaseRenderBuffer? = null
+        private set
 
     val renderingToTexture get() = currentRenderBuffer !== mainRenderBuffer && currentRenderBuffer !== null
 
@@ -817,46 +835,43 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
     open fun fixWidthForRenderToTexture(width: Int): Int = width.nextMultipleOf(64)
     open fun fixHeightForRenderToTexture(height: Int): Int = height.nextMultipleOf(64)
 
-    inline fun renderToTexture(width: Int, height: Int, render: (rb: RenderBuffer) -> Unit, use: (tex: Texture, texWidth: Int, texHeight: Int) -> Unit) {
+    @KoragExperimental
+    fun unsafeAllocateFrameRenderBuffer(width: Int, height: Int): RenderBuffer {
         val realWidth = fixWidthForRenderToTexture(width)
         val realHeight = fixHeightForRenderToTexture(height)
         val rb = renderBuffers.alloc()
         frameRenderBuffers += rb
+        rb.setSize(0, 0, realWidth, realHeight, realWidth, realHeight)
+        //println("unsafeAllocateFrameRenderBuffer($width, $height), real($realWidth, $realHeight), $rb")
+        return rb
+    }
 
+    @KoragExperimental
+    fun unsafeFreeFrameRenderBuffer(rb: RenderBuffer) {
+        frameRenderBuffers -= rb
+        renderBuffers.free(rb)
+    }
+
+    @OptIn(KoragExperimental::class)
+    inline fun renderToTexture(width: Int, height: Int, render: (rb: RenderBuffer) -> Unit, use: (tex: Texture, texWidth: Int, texHeight: Int) -> Unit) {
+        val rb = unsafeAllocateFrameRenderBuffer(width, height)
         try {
-            rb.setSize(0, 0, realWidth, realHeight, realWidth, realHeight)
             setRenderBufferTemporally(rb) {
                 clear(Colors.TRANSPARENT_BLACK) // transparent
                 render(rb)
             }
-
             use(rb.tex, rb.width, rb.height)
         } finally {
-            frameRenderBuffers -= rb
-            renderBuffers.free(rb)
-        }
-    }
-
-    @KoragExperimental
-    inline fun renderToExternalRB(width: Int, height: Int, rb: BaseRenderBuffer , render: () -> Unit) {
-        try {
-            rb.setSize(0, 0, width, height, width, height)
-            setRenderBufferTemporally(rb) {
-                clear(Colors.TRANSPARENT_BLACK) // transparent
-                render()
-            }
-
-        } finally {
+            unsafeFreeFrameRenderBuffer(rb)
         }
     }
 
     inline fun renderToBitmap(bmp: Bitmap32, render: () -> Unit) {
-        renderToTexture(bmp.width, bmp.height, {
+        renderToTexture(bmp.width, bmp.height, render = {
             render()
+            //println("renderToBitmap.readColor: $currentRenderBuffer")
             readColor(bmp)
-        }, { _, _, _ ->
-
-        })
+        }, { _, _, _ -> })
     }
 
     fun setRenderBuffer(renderBuffer: BaseRenderBuffer?): BaseRenderBuffer? {
@@ -869,7 +884,7 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
 
     open fun readColor(bitmap: Bitmap32): Unit = TODO()
     open fun readDepth(width: Int, height: Int, out: FloatArray): Unit = TODO()
-    open fun readDepth(out: FloatArray2): Unit = readDepth(out.width, out.height, out.data)
+    fun readDepth(out: FloatArray2): Unit = readDepth(out.width, out.height, out.data)
     open fun readColorTexture(texture: Texture, width: Int = backWidth, height: Int = backHeight): Unit = TODO()
     fun readColor() = Bitmap32(backWidth, backHeight).apply { readColor(this) }
     fun readDepth() = FloatArray2(backWidth, backHeight) { 0f }.apply { readDepth(this) }
@@ -887,10 +902,7 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
         }, FragmentShader {
             DefaultShaders.apply {
                 //out setTo vec4(1f, 1f, 0f, 1f)
-                //out setTo texture2D(u_Tex, v_Tex["xy"])
-                // @TODO: Do we really need u_TexTransformMatN? If so, can we do this in the Vertex Shader instead so it is cheaper?
-                // @TODO: Alternative: can we use a custom shader for this instead?
-                out setTo texture2D(u_Tex, u_TexTransformMatN[0] * vec4(v_Tex["xy"], 0f.lit, 1f.lit))
+                out setTo texture2D(u_Tex, v_Tex["xy"])
             }
         })
         val uniforms = UniformValues()
@@ -906,8 +918,6 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
         fun draw(tex: Texture, left: Float, top: Float, right: Float, bottom: Float) {
             //tex.upload(Bitmap32(32, 32) { x, y -> Colors.RED })
             //uniforms[DefaultShaders.u_Tex] = TextureUnit(tex)
-            // @TODO: Do we really need u_TexTransformMatN?
-            uniforms[DefaultShaders.u_TexTransformMatN[0]] = tex.transform
 
             val texLeft = -1f
             val texRight = +1f
@@ -934,8 +944,6 @@ abstract class AG : AGFeatures, Extra by Extra.Mixin() {
 
     val textureDrawer by lazy { TextureDrawer() }
     val flipRenderTexture = true
-    @KoragExperimental
-    var flipRender = false
 
     fun drawTexture(tex: Texture) {
         textureDrawer.draw(tex, -1f, +1f, +1f, -1f)

@@ -57,12 +57,18 @@ data class GradientPaint(
     val interpolationMethod: GradientInterpolationMethod = GradientInterpolationMethod.NORMAL,
     val units: GradientUnits = GradientUnits.OBJECT_BOUNDING_BOX
 ) : TransformedPaint {
+    @Deprecated("")
     fun x0(m: Matrix) = m.transformX(x0, y0)
+    @Deprecated("")
     fun y0(m: Matrix) = m.transformY(x0, y0)
+    @Deprecated("")
     fun r0(m: Matrix) = m.transformX(r0, r0)
 
+    @Deprecated("")
     fun x1(m: Matrix) = m.transformX(x1, y1)
+    @Deprecated("")
     fun y1(m: Matrix) = m.transformY(x1, y1)
+    @Deprecated("")
     fun r1(m: Matrix) = m.transformX(r1, r1)
 
     val numberOfStops get() = stops.size
@@ -178,5 +184,7 @@ class BitmapPaint(
 
     val bmp32 = bitmap.toBMP32()
     override fun transformed(m: Matrix) = BitmapPaint(bitmap, Matrix().multiply(m, this.transform))
+
     //override fun transformed(m: Matrix) = BitmapPaint(bitmap, Matrix().multiply(this.transform, m))
+    override fun toString(): String = "BitmapPaint($bitmap, cycle=($cycleX, $cycleY), smooth=$smooth, transform=$transform)"
 }

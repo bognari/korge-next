@@ -52,8 +52,8 @@ class FastByteArrayInputStream(val ba: ByteArray, offset: Int = 0, val start: In
     fun unread(count: Int) = skip(-count)
 
 	fun skipToAlign(count: Int) {
-		val nextPosition = offset.nextAlignedTo(offset)
-		readBytes((nextPosition - offset).toInt())
+		val nextPosition = offset.nextAlignedTo(count)
+        skip(nextPosition - offset)
 	}
 
     fun readBytesExact(len: Int) = increment(len) { ba.copyOfRange(offset, offset + len) }
@@ -179,3 +179,4 @@ class FastByteArrayInputStream(val ba: ByteArray, offset: Int = 0, val start: In
 
 fun ByteArray.openFastStream(offset: Int = 0) = FastByteArrayInputStream(this, offset)
 fun FastByteArrayInputStream.toSyncStream() = ReadonlySyncStreamBase(ba, start, end - start).open()
+fun FastByteArrayInputStream.toAsyncStream() = toSyncStream().toAsync()

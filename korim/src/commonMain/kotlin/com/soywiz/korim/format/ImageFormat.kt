@@ -2,13 +2,23 @@ package com.soywiz.korim.format
 
 import com.soywiz.kds.*
 import com.soywiz.korim.bitmap.*
+import com.soywiz.korio.async.*
 import com.soywiz.korio.file.*
 import com.soywiz.korio.lang.*
 import com.soywiz.korio.stream.*
+import com.soywiz.korma.geom.*
+import kotlin.math.*
 
 abstract class ImageFormatWithContainer(vararg exts: String) : ImageFormat(*exts) {
     override fun readImageContainer(s: SyncStream, props: ImageDecodingProps): ImageDataContainer = TODO()
     final override fun readImage(s: SyncStream, props: ImageDecodingProps): ImageData = readImageContainer(s, props).imageDatas.first()
+}
+
+abstract class ImageFormatSuspend(vararg exts: String) : ImageFormat(*exts) {
+    override suspend fun decodeHeaderSuspend(s: AsyncStream, props: ImageDecodingProps): ImageInfo? = TODO()
+
+    final override fun decodeHeader(s: SyncStream, props: ImageDecodingProps): ImageInfo? =
+        runBlockingNoSuspensionsNullable { decodeHeaderSuspend(s.sliceHere().toAsync(), props) }
 }
 
 abstract class ImageFormat(vararg exts: String) {
@@ -20,6 +30,10 @@ abstract class ImageFormat(vararg exts: String) {
 		s: SyncStream,
 		props: ImageEncodingProps = ImageEncodingProps("unknown")
 	): Unit = throw UnsupportedOperationException()
+
+    open suspend fun decodeHeaderSuspend(s: AsyncStream, props: ImageDecodingProps = ImageDecodingProps()): ImageInfo? {
+        return decodeHeader(s.toSyncOrNull() ?: s.readAll().openSync())
+    }
 
 	open fun decodeHeader(s: SyncStream, props: ImageDecodingProps = ImageDecodingProps()): ImageInfo? =
 		runIgnoringExceptions(show = true) {
@@ -73,8 +87,34 @@ data class ImageDecodingProps(
     val filename: String = "unknown",
     val width: Int? = null,
     val height: Int? = null,
+    val premultiplied: Boolean = true,
+    // Requested but not enforced. Max width and max height
+    val requestedMaxSize: Int? = null,
+    val debug: Boolean = false,
     override var extra: ExtraType = null
-) : Extra
+) : Extra {
+
+    // https://developer.android.com/reference/android/graphics/BitmapFactory.Options#inSampleSize
+    fun getSampleSize(originalWidth: Int, originalHeight: Int): Int {
+        var sampleSize = 1
+        var width = originalWidth
+        var height = originalHeight
+        val maxWidth = max(1, requestedMaxSize ?: originalWidth)
+        val maxHeight = max(1, requestedMaxSize ?: originalHeight)
+        while (width > maxWidth || height > maxHeight) {
+            width /= 2
+            height /= 2
+            sampleSize *= 2
+        }
+        return sampleSize
+    }
+
+    companion object {
+        val DEFAULT_PREMULT = ImageDecodingProps(premultiplied = true)
+        val DEFAULT = ImageDecodingProps(premultiplied = false)
+        fun DEFAULT(premultiplied: Boolean) = if (premultiplied) DEFAULT_PREMULT else DEFAULT
+    }
+}
 
 data class ImageEncodingProps(
     val filename: String = "",
